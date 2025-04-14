@@ -4,6 +4,7 @@ import os
 import time
 import neat
 import pickle
+import config as cfg  # Import tệp cấu hình
 
 pygame.init()
 
@@ -35,23 +36,28 @@ GEN = 0  # Generation counter
 MAX_FITNESS = 0  # Max fitness across all generations
 
 # --- Game Setup ---
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
 pygame.display.set_caption("Flappy Bird AI")
 clock = pygame.time.Clock()
 
 # Load assets
 try:
-    background = pygame.transform.scale(pygame.image.load("assets/background-night.png"), (SCREEN_WIDTH, SCREEN_HEIGHT - FLOOR_HEIGHT)).convert()
-    floor = pygame.transform.scale(pygame.image.load("assets/floor.png"), (SCREEN_WIDTH, FLOOR_HEIGHT)).convert()
-    bird_up = pygame.transform.scale(pygame.image.load("assets/yellowbird-upflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    bird_mid = pygame.transform.scale(pygame.image.load("assets/yellowbird-midflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    bird_down = pygame.transform.scale(pygame.image.load("assets/yellowbird-downflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    tube_img = pygame.image.load("assets/pipe-green.png").convert_alpha()
+    background = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BACKGROUND_IMAGE)), 
+                                       (cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT)).convert()
+    floor = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.FLOOR_IMAGE)), 
+                                  (cfg.SCREEN_WIDTH, cfg.FLOOR_HEIGHT)).convert()
+    bird_up = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_UP_IMAGE)), 
+                                    (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    bird_mid = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_MID_IMAGE)), 
+                                     (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    bird_down = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_DOWN_IMAGE)), 
+                                      (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    tube_img = pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.TUBE_IMAGE)).convert_alpha()
     
     # Sound Effects
-    flap_sound = pygame.mixer.Sound('sound/sfx_wing.wav')
-    hit_sound = pygame.mixer.Sound('sound/sfx_hit.wav')
-    score_sound = pygame.mixer.Sound('sound/sfx_point.wav')
+    flap_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.FLAP_SOUND))
+    hit_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.HIT_SOUND))
+    score_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.SCORE_SOUND))
 except pygame.error as e:
     print(f"Error loading assets: {e}")
     pygame.quit()
@@ -71,14 +77,14 @@ class Bird:
         self.jump_counter = 0
         self.frame_index = 0
         self.tick_count = 0
-        self.rect = pygame.Rect(x, y, BIRD_WIDTH, BIRD_HEIGHT)
+        self.rect = pygame.Rect(x, y, cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)
         self.alive = True
         self.score = 0
         self.fitness = 0
         
     def jump(self):
         """Make the bird jump."""
-        self.velocity = -BIRD_JUMP_STRENGTH
+        self.velocity = -cfg.BIRD_JUMP_STRENGTH
         self.jump_counter += 1
         
     def move(self):
@@ -89,7 +95,7 @@ class Bird:
         self.tick_count += 1
         
         # Apply gravity
-        self.velocity += GRAVITY
+        self.velocity += cfg.GRAVITY
         
         # Update position
         self.y += self.velocity
@@ -103,8 +109,8 @@ class Bird:
             self.velocity = 0
             
         # Don't allow the bird to go below the floor
-        if self.y > SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT:
-            self.y = SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT
+        if self.y > cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT:
+            self.y = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT
             self.alive = False
             
     def draw(self, win):
@@ -121,22 +127,22 @@ class Tube:
     """Class representing a pair of tubes (obstacles)."""
     def __init__(self, x):
         self.x = x
-        self.height = random.randint(TUBE_MIN_HEIGHT, TUBE_MAX_HEIGHT)
+        self.height = random.randint(cfg.TUBE_MIN_HEIGHT, cfg.TUBE_MAX_HEIGHT)
         self.passed = False
         
         # Bottom tube (upside-down)
-        self.bottom_tube_surface = pygame.transform.scale(tube_img, (TUBE_WIDTH, self.height))
+        self.bottom_tube_surface = pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, self.height))
         self.bottom_tube = pygame.transform.rotate(self.bottom_tube_surface, 180)
         self.bottom_rect = self.bottom_tube.get_rect(topleft=(x, 0))
         
         # Top tube
-        self.top_height = SCREEN_HEIGHT - FLOOR_HEIGHT - self.height - TUBE_VERTICAL_GAP
-        self.top_tube = pygame.transform.scale(tube_img, (TUBE_WIDTH, self.top_height))
-        self.top_rect = self.top_tube.get_rect(bottomleft=(x, SCREEN_HEIGHT - FLOOR_HEIGHT))
+        self.top_height = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - self.height - cfg.TUBE_VERTICAL_GAP
+        self.top_tube = pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, self.top_height))
+        self.top_rect = self.top_tube.get_rect(bottomleft=(x, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
     
     def move(self):
         """Move the tube to the left."""
-        self.x -= GAME_SPEED
+        self.x -= cfg.GAME_SPEED
         self.bottom_rect.x = self.x
         self.top_rect.x = self.x
     
@@ -153,8 +159,8 @@ class Tube:
 
 def draw_floor(win, floor_x):
     """Draw the moving floor."""
-    win.blit(floor, (floor_x, SCREEN_HEIGHT - FLOOR_HEIGHT))
-    win.blit(floor, (floor_x + SCREEN_WIDTH, SCREEN_HEIGHT - FLOOR_HEIGHT))
+    win.blit(floor, (floor_x, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
+    win.blit(floor, (floor_x + cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
 
 def draw_stats(win, birds, gen, max_fitness):
     """Draw statistics on the screen during training."""
@@ -167,7 +173,7 @@ def draw_stats(win, birds, gen, max_fitness):
     
     y = 20
     for stat in stats:
-        text = font.render(stat, True, WHITE)
+        text = font.render(stat, True, cfg.WHITE)
         win.blit(text, (20, y))
         y += 25
 
@@ -190,170 +196,162 @@ def load_best_bird(filename="best_bird.pickle", config=None):
         print(f"Error loading {filename}")
         return None
 
+# Thêm biến global để theo dõi điểm số cao nhất đã lưu
+LAST_SAVED_SCORE = 0
+LAST_SAVED_FITNESS = 0
+
 def eval_genomes(genomes, config):
-    """Evaluate genomes in NEAT algorithm."""
-    global GEN, MAX_FITNESS
-    GEN += 1
-    
-    # Initialize birds and neural networks
+    """Evaluate all genomes in the population."""
+    global GEN, MAX_FITNESS, LAST_SAVED_SCORE, LAST_SAVED_FITNESS
+
+    # Khởi tạo biến theo dõi vật thể tốt nhất trong thế hệ này
+    best_genome = None
+    best_bird = None
+    highest_fitness = 0
+    highest_score = 0
+
     birds = []
-    networks = []
     ge = []
-    
-    for _, genome in genomes:
-        bird = Bird(BIRD_START_X, BIRD_START_Y)
-        birds.append(bird)
-        
+    nets = []
+
+    # Tạo danh sách chim và gán bộ gen tương ứng
+    for genome_id, genome in genomes:
         genome.fitness = 0
-        ge.append(genome)
-        
         net = neat.nn.FeedForwardNetwork.create(genome, config)
-        networks.append(net)
-    
+        nets.append(net)
+        birds.append(Bird(cfg.BIRD_START_X, cfg.BIRD_START_Y))
+        ge.append(genome)
+
     # Initialize game objects
-    tubes = [Tube(SCREEN_WIDTH + i * TUBE_HORIZONTAL_GAP) for i in range(3)]
+    tubes = [Tube(cfg.SCREEN_WIDTH + i * cfg.TUBE_HORIZONTAL_GAP) for i in range(3)]
     floor_x = 0
     score = 0
     running = True
-    stopped_early = False  # Biến để kiểm tra xem có dừng sớm không
-    
-    # Thêm hướng dẫn dừng
-    stop_text = font.render("Press ESC to stop training and save", True, WHITE)
-    
-    while running and len([bird for bird in birds if bird.alive]) > 0:
-        clock.tick(60)
-        
-        # Handle quit event
+
+    # Vòng lặp chính của trò chơi
+    while running and len(birds) > 0:
+        clock.tick(cfg.FPS)
+
+        # Xử lý sự kiện
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                running = False
                 pygame.quit()
                 quit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:  # Kiểm tra phím ESC
-                    stopped_early = True
-                    running = False
-        
-        # Determine which tube is the next one
-        pipe_index = 0
-        if len(tubes) > 1 and birds[0].x > tubes[0].x + TUBE_WIDTH:
-            pipe_index = 1
-        
-        # Control each bird using its neural network
-        for i, bird in enumerate(birds):
-            if not bird.alive:
-                continue
-                
-            # Give fitness for staying alive
-            ge[i].fitness += 0.1
+                break
+
+        # Xác định ống tiếp theo để chim tập trung vào
+        pipe_ind = 0
+        if len(birds) > 0:
+            if len(tubes) > 1 and birds[0].x > tubes[0].x + tubes[0].bottom_rect.width:
+                pipe_ind = 1
+        else:
+            running = False
+            break
+
+        # Các chim di chuyển và nhận thưởng cho việc tồn tại
+        for x, bird in enumerate(birds):
+            # Thưởng cho mỗi khung hình mà chim còn sống
+            ge[x].fitness += 0.1
             bird.fitness += 0.1
+            bird.move()
+
+            # Neural network nhận đầu vào và quyết định có nhảy hay không
+            output = nets[x].activate((
+                bird.y,
+                abs(bird.y - tubes[pipe_ind].height),
+                abs(bird.y - tubes[pipe_ind].top_height),
+                abs(bird.x - tubes[pipe_ind].x)
+            ))
             
-            # Get network inputs:
-            # 1. Bird's y position
-            # 2. Distance to next tube
-            # 3. Height of next tube's gap
-            tube_center = tubes[pipe_index].height + TUBE_VERTICAL_GAP / 2
-            inputs = (
-                bird.y / SCREEN_HEIGHT,  # Normalized bird height
-                (tubes[pipe_index].x - bird.x) / SCREEN_WIDTH,  # Normalized horizontal distance
-                (tube_center - bird.y) / SCREEN_HEIGHT  # Normalized vertical distance to gap
-            )
-            
-            # Get network output (jump or not)
-            output = networks[i].activate(inputs)
-            
-            # Jump if output is > 0.5
+            # Output > 0.5 thì chim nhảy
             if output[0] > 0.5:
                 bird.jump()
+
+        add_pipe = False
+        rem = []
         
-        # Move birds
-        for bird in birds:
-            bird.move()
-        
-        # Move tubes
-        remove_tubes = []
+        # Kiểm tra va chạm và cập nhật vị trí ống
         for tube in tubes:
-            tube.move()
-            
-            # Mark tube for removal if it's off screen
-            if tube.x + TUBE_WIDTH < 0:
-                remove_tubes.append(tube)
-            
-            # Check for collisions and update score
-            for i, bird in enumerate(birds):
-                if not bird.alive:
-                    continue
-                    
-                # Check if bird passed the tube
+            for x, bird in enumerate(birds):
+                # Kiểm tra va chạm
+                if tube.collide(bird):
+                    ge[x].fitness -= 1  # Trừ điểm nếu đâm vào ống
+                    # Lưu lại nếu đây là con chim tốt nhất cho đến giờ
+                    if ge[x].fitness > highest_fitness:
+                        highest_fitness = ge[x].fitness
+                        highest_score = score
+                        best_genome = ge[x]
+                        best_bird = bird
+                    birds.pop(x)
+                    nets.pop(x)
+                    ge.pop(x)
+                
+                # Kiểm tra xem chim đã vượt qua ống chưa
                 if not tube.passed and tube.x < bird.x:
                     tube.passed = True
-                    bird.score += 1
-                    score = max(score, bird.score)
-                    
-                    # Extra fitness for passing tube
-                    ge[i].fitness += 5
-                    bird.fitness += 5
-                
-                # Check for collision
-                if tube.collide(bird):
-                    bird.alive = False
+                    add_pipe = True
+            
+            # Xóa ống khi chúng ra khỏi màn hình
+            if tube.x + tube.bottom_rect.width < 0:
+                rem.append(tube)
+            
+            tube.move()
         
-        # Remove tubes that are off screen and add new ones
-        for tube in remove_tubes:
-            tubes.remove(tube)
-            # Add new tube
-            tubes.append(Tube(tubes[-1].x + TUBE_HORIZONTAL_GAP))
+        # Thêm ống mới và tăng điểm
+        if add_pipe:
+            score += 1
+            # Thưởng thêm cho việc đi qua ống
+            for genome in ge:
+                genome.fitness += 5
+            tubes.append(Tube(tubes[-1].x + cfg.TUBE_HORIZONTAL_GAP))
+        
+        # Xóa ống cũ
+        for r in rem:
+            tubes.remove(r)
+        
+        # Kiểm tra va chạm với đất hoặc trần
+        for x, bird in enumerate(birds):
+            if bird.y + bird.BIRD_HEIGHT >= cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT or bird.y < 0:
+                # Lưu lại nếu đây là con chim tốt nhất cho đến giờ
+                if ge[x].fitness > highest_fitness:
+                    highest_fitness = ge[x].fitness
+                    highest_score = score
+                    best_genome = ge[x]
+                    best_bird = bird
+                birds.pop(x)
+                nets.pop(x)
+                ge.pop(x)
         
         # Update floor position
-        floor_x -= GAME_SPEED
-        if floor_x <= -SCREEN_WIDTH:
+        floor_x -= cfg.GAME_SPEED
+        if floor_x <= -cfg.SCREEN_WIDTH:
             floor_x = 0
         
-        # Draw everything
+        # Cập nhật MAX_FITNESS nếu thế hệ này có fitness cao hơn
+        if highest_fitness > MAX_FITNESS:
+            MAX_FITNESS = highest_fitness
+            # Chỉ lưu nếu điểm tăng ít nhất 1 hoặc fitness tăng đáng kể mà không có sự thay đổi về điểm
+            if highest_score > LAST_SAVED_SCORE or (highest_fitness - LAST_SAVED_FITNESS >= 20 and highest_score >= LAST_SAVED_SCORE):
+                save_best_bird(best_genome, config)
+                LAST_SAVED_SCORE = highest_score
+                LAST_SAVED_FITNESS = highest_fitness
+        
+        # Cập nhật màn hình
         screen.blit(background, (0, 0))
         for tube in tubes:
             tube.draw(screen)
         draw_floor(screen, floor_x)
         
-        # Chỉ vẽ chim còn sống
+        # Chỉ vẽ chim nếu còn sống
         for bird in birds:
             if bird.alive:
                 bird.draw(screen)
         
         # Draw stats
-        current_max_fitness = max([g.fitness for g in ge]) if ge else 0
-        MAX_FITNESS = max(MAX_FITNESS, current_max_fitness)
         draw_stats(screen, birds, GEN, MAX_FITNESS)
         
-        # Hiển thị hướng dẫn dừng
-        screen.blit(stop_text, (20, SCREEN_HEIGHT - 30))
-        
         pygame.display.flip()
-        
-        # Save best bird if it reaches a significant score
-        best_genome = max(ge, key=lambda g: g.fitness) if ge else None
-        if best_genome and best_genome.fitness > 100:
-            save_best_bird(best_genome, config)
-    
-    # Lưu chim tốt nhất nếu dừng sớm
-    if stopped_early and ge:
-        best_genome = max(ge, key=lambda g: g.fitness)
-        save_best_bird(best_genome, config, "stopped_best.pickle")
-        # Hiển thị thông báo đã lưu
-        screen.fill(BLACK)
-        saved_text = font.render("Training stopped. Best bird saved!", True, WHITE)
-        screen.blit(saved_text, (SCREEN_WIDTH//2 - saved_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        pygame.time.delay(2000)  # Delay 2 giây để hiển thị thông báo
-        
-        return False  # Return False to signal early stopping
-    
-    # Update max fitness for this run
-    if ge:
-        best_fitness = max([g.fitness for g in ge])
-        if best_fitness > MAX_FITNESS:
-            MAX_FITNESS = best_fitness
-            best_genome = max(ge, key=lambda g: g.fitness)
-            save_best_bird(best_genome, config)
     
     return True  # Return True to continue training
 
@@ -377,11 +375,10 @@ def run_neat(config_path):
     
     # Run the algorithm
     try:
-        max_generations = 100
         current_gen = 0
         
         # Chạy thuật toán theo từng thế hệ để có thể dừng giữa chừng
-        while current_gen < max_generations:
+        while current_gen < cfg.MAX_GENERATIONS:
             continue_training = population.run(eval_genomes, 1)  # Chỉ chạy 1 thế hệ mỗi lần
             current_gen += 1
             
@@ -417,14 +414,14 @@ def play_with_best_bird(config_path):
         return
     
     # Initialize game
-    bird = Bird(BIRD_START_X, BIRD_START_Y)
-    tubes = [Tube(SCREEN_WIDTH + i * TUBE_HORIZONTAL_GAP) for i in range(3)]
+    bird = Bird(cfg.BIRD_START_X, cfg.BIRD_START_Y)
+    tubes = [Tube(cfg.SCREEN_WIDTH + i * cfg.TUBE_HORIZONTAL_GAP) for i in range(3)]
     floor_x = 0
     score = 0
     running = True
     
     while running:
-        clock.tick(60)
+        clock.tick(cfg.FPS)
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -432,16 +429,16 @@ def play_with_best_bird(config_path):
         
         # Determine which tube is the next one
         pipe_index = 0
-        if len(tubes) > 1 and bird.x > tubes[0].x + TUBE_WIDTH:
+        if len(tubes) > 1 and bird.x > tubes[0].x + tubes[0].bottom_rect.width:
             pipe_index = 1
         
         # AI decision making
         if bird.alive:
-            tube_center = tubes[pipe_index].height + TUBE_VERTICAL_GAP / 2
+            tube_center = tubes[pipe_index].height + cfg.TUBE_VERTICAL_GAP / 2
             inputs = (
-                bird.y / SCREEN_HEIGHT,
-                (tubes[pipe_index].x - bird.x) / SCREEN_WIDTH,
-                (tube_center - bird.y) / SCREEN_HEIGHT
+                bird.y / cfg.SCREEN_HEIGHT,
+                (tubes[pipe_index].x - bird.x) / cfg.SCREEN_WIDTH,
+                (tube_center - bird.y) / cfg.SCREEN_HEIGHT
             )
             
             output = net.activate(inputs)
@@ -456,7 +453,7 @@ def play_with_best_bird(config_path):
         for tube in tubes:
             tube.move()
             
-            if tube.x + TUBE_WIDTH < 0:
+            if tube.x + tube.bottom_rect.width < 0:
                 remove_tubes.append(tube)
             
             # Update score and check collision
@@ -471,11 +468,11 @@ def play_with_best_bird(config_path):
         # Remove tubes and add new ones
         for tube in remove_tubes:
             tubes.remove(tube)
-            tubes.append(Tube(tubes[-1].x + TUBE_HORIZONTAL_GAP))
+            tubes.append(Tube(tubes[-1].x + cfg.TUBE_HORIZONTAL_GAP))
         
         # Update floor position
-        floor_x -= GAME_SPEED
-        if floor_x <= -SCREEN_WIDTH:
+        floor_x -= cfg.GAME_SPEED
+        if floor_x <= -cfg.SCREEN_WIDTH:
             floor_x = 0
         
         # Draw everything
@@ -489,7 +486,7 @@ def play_with_best_bird(config_path):
             bird.draw(screen)
         
         # Draw score
-        score_text = font.render(f"Score: {score}", True, WHITE)
+        score_text = font.render(f"Score: {score}", True, cfg.WHITE)
         screen.blit(score_text, (20, 20))
         
         pygame.display.flip()
@@ -498,15 +495,15 @@ def play_with_best_bird(config_path):
 
 if __name__ == "__main__":
     local_dir = os.path.dirname(__file__)
-    config_path = os.path.join(local_dir, "config-feedforward.txt")
+    config_path = os.path.join(local_dir, cfg.NEAT_CONFIG_PATH)
     
     # Main menu
     while True:
-        screen.fill(BLACK)
+        screen.fill(cfg.BLACK)
         
         # Draw title
-        title = font.render("FLAPPY BIRD AI", True, WHITE)
-        screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, 150))
+        title = font.render("FLAPPY BIRD AI", True, cfg.WHITE)
+        screen.blit(title, (cfg.SCREEN_WIDTH//2 - title.get_width()//2, 150))
         
         # Draw options
         options = [
@@ -516,8 +513,8 @@ if __name__ == "__main__":
         ]
         
         for i, option in enumerate(options):
-            text = font.render(option, True, WHITE)
-            screen.blit(text, (SCREEN_WIDTH//2 - text.get_width()//2, 250 + i*50))
+            text = font.render(option, True, cfg.WHITE)
+            screen.blit(text, (cfg.SCREEN_WIDTH//2 - text.get_width()//2, 250 + i*50))
         
         pygame.display.flip()
         

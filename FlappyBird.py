@@ -1,5 +1,7 @@
 import pygame
 import random
+import os  # Thêm import os để đường dẫn tệp
+import config as cfg  # Import tệp cấu hình chung
 
 pygame.init()
 
@@ -27,10 +29,10 @@ FONT_SIZE = 35
 
 # --- Game Variables ---
 # Screen and Display
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
 pygame.display.set_caption("Flappy Bird Clone")
 clock = pygame.time.Clock()
-game_font = pygame.font.Font('04B_19.ttf', FONT_SIZE)
+game_font = pygame.font.Font('04B_19.ttf', cfg.FONT_SIZE)
 
 # Floor
 xFloor = 0
@@ -38,7 +40,7 @@ xFloor = 0
 # Bird
 birdMovement = 0
 birdIndex = 0
-posBird = [BIRD_START_X, BIRD_START_Y]
+posBird = [cfg.BIRD_START_X, cfg.BIRD_START_Y]
 rotated_bird = None
 
 # Tubes
@@ -53,23 +55,30 @@ state = "home" # Trạng thái game: "home", "play", "game over"
 die = False
 running = True
 e_rotated_state = 0 # Trạng thái xoay khi chết (0: chưa xoay, 1: đã xoay)
-speed = GAME_SPEED # Tốc độ game hiện tại
+speed = cfg.GAME_SPEED # Tốc độ game hiện tại
 
 # --- Load Assets ---
 try:
-    background = pygame.transform.scale(pygame.image.load("assets/background-night.png"), (SCREEN_WIDTH, SCREEN_HEIGHT - FLOOR_HEIGHT)).convert()
-    floor = pygame.transform.scale(pygame.image.load("assets/floor.png"), (SCREEN_WIDTH, FLOOR_HEIGHT)).convert()
-    bird_up = pygame.transform.scale(pygame.image.load("assets/yellowbird-upflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    bird_mid = pygame.transform.scale(pygame.image.load("assets/yellowbird-midflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    bird_down = pygame.transform.scale(pygame.image.load("assets/yellowbird-downflap.png"), (BIRD_WIDTH, BIRD_HEIGHT)).convert_alpha()
-    tube_img = pygame.image.load("assets/pipe-green.png").convert_alpha() # Tải ảnh ống gốc
-    message_img = pygame.transform.scale(pygame.image.load("assets/message.png"), (SCREEN_WIDTH, SCREEN_HEIGHT)).convert_alpha()
-    gameover_img = pygame.transform.scale(pygame.image.load("assets/gameover.png"), (400, 100)).convert_alpha()
+    background = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BACKGROUND_IMAGE)), 
+                                       (cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT)).convert()
+    floor = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.FLOOR_IMAGE)), 
+                                  (cfg.SCREEN_WIDTH, cfg.FLOOR_HEIGHT)).convert()
+    bird_up = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_UP_IMAGE)), 
+                                    (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    bird_mid = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_MID_IMAGE)), 
+                                     (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    bird_down = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.BIRD_DOWN_IMAGE)), 
+                                      (cfg.BIRD_WIDTH, cfg.BIRD_HEIGHT)).convert_alpha()
+    tube_img = pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.TUBE_IMAGE)).convert_alpha() # Tải ảnh ống gốc
+    message_img = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.MESSAGE_IMAGE)), 
+                                        (cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT)).convert_alpha()
+    gameover_img = pygame.transform.scale(pygame.image.load(os.path.join(cfg.ASSETS_PATH, cfg.GAMEOVER_IMAGE)), 
+                                         (400, 100)).convert_alpha()
 
     # Sound Effects
-    flap_sound = pygame.mixer.Sound('sound/sfx_wing.wav')
-    hit_sound = pygame.mixer.Sound('sound/sfx_hit.wav')
-    score_sound = pygame.mixer.Sound('sound/sfx_point.wav')
+    flap_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.FLAP_SOUND))
+    hit_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.HIT_SOUND))
+    score_sound = pygame.mixer.Sound(os.path.join(cfg.SOUND_PATH, cfg.SCORE_SOUND))
 except pygame.error as e:
     print(f"Error loading assets: {e}")
     running = False
@@ -84,27 +93,27 @@ def initialize_tubes():
     xTube.clear()
     checkScore[:] = [0, 0, 0] # Reset trạng thái tính điểm
     for i in range(3):
-        random_height = random.randint(TUBE_MIN_HEIGHT, TUBE_MAX_HEIGHT)
+        random_height = random.randint(cfg.TUBE_MIN_HEIGHT, cfg.TUBE_MAX_HEIGHT)
         # Vị trí X ban đầu cách nhau TUBE_HORIZONTAL_GAP, bắt đầu ngoài màn hình
-        initial_x = SCREEN_WIDTH + i * TUBE_HORIZONTAL_GAP
+        initial_x = cfg.SCREEN_WIDTH + i * cfg.TUBE_HORIZONTAL_GAP
         xTube.append(initial_x)
 
         # Tạo ống dưới (xoay 180 độ)
-        bottom_tube_surface = pygame.transform.scale(tube_img, (TUBE_WIDTH, random_height))
+        bottom_tube_surface = pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, random_height))
         tube.append(pygame.transform.rotate(bottom_tube_surface, 180))
 
         # Tạo ống trên
-        top_tube_height = SCREEN_HEIGHT - FLOOR_HEIGHT - random_height - TUBE_VERTICAL_GAP
-        tube_up.append(pygame.transform.scale(tube_img, (TUBE_WIDTH, top_tube_height)))
+        top_tube_height = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - random_height - cfg.TUBE_VERTICAL_GAP
+        tube_up.append(pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, top_tube_height)))
 
 def draw_floor():
     """Vẽ sàn di chuyển liên tục."""
     global xFloor
-    screen.blit(floor, (xFloor, SCREEN_HEIGHT - FLOOR_HEIGHT))
-    screen.blit(floor, (xFloor + SCREEN_WIDTH, SCREEN_HEIGHT - FLOOR_HEIGHT))
+    screen.blit(floor, (xFloor, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
+    screen.blit(floor, (xFloor + cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
     xFloor -= speed
     # Reset vị trí sàn khi nó di chuyển hết màn hình
-    if xFloor <= -SCREEN_WIDTH:
+    if xFloor <= -cfg.SCREEN_WIDTH:
         xFloor = 0
 
 def draw_bird():
@@ -117,14 +126,14 @@ def draw_bird():
 def apply_gravity():
     """Áp dụng trọng lực lên con chim."""
     global birdMovement
-    birdMovement += GRAVITY
+    birdMovement += cfg.GRAVITY
     posBird[1] += birdMovement
 
 def bird_flap():
     """Làm cho chim bay lên."""
     global birdMovement
     birdMovement = 0 # Reset trọng lực tích lũy
-    birdMovement = -BIRD_JUMP_STRENGTH
+    birdMovement = -cfg.BIRD_JUMP_STRENGTH
     flap_sound.play()
 
 def draw_tubes():
@@ -133,7 +142,7 @@ def draw_tubes():
     for i in range(3):
         # Tính toán vị trí ống trên dựa vào chiều cao ống dưới và khoảng cách
         bottom_tube_rect = tube[i].get_rect(topleft=(xTube[i], 0))
-        top_tube_rect = tube_up[i].get_rect(bottomleft=(xTube[i], SCREEN_HEIGHT - FLOOR_HEIGHT))
+        top_tube_rect = tube_up[i].get_rect(bottomleft=(xTube[i], cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT))
 
         # Vẽ ống
         screen.blit(tube[i], bottom_tube_rect)
@@ -150,17 +159,17 @@ def draw_tubes():
             score_sound.play()
 
         # Reset ống khi nó ra khỏi màn hình bên trái
-        if xTube[i] <= -TUBE_WIDTH:
+        if xTube[i] <= -cfg.TUBE_WIDTH:
             # Tính lại vị trí X cho ống mới (ở ngoài màn hình bên phải)
-            xTube[i] = xTube[(i - 1 + 3) % 3] + TUBE_HORIZONTAL_GAP # Đặt cách ống trước đó một khoảng
+            xTube[i] = xTube[(i - 1 + 3) % 3] + cfg.TUBE_HORIZONTAL_GAP # Đặt cách ống trước đó một khoảng
             # Tạo lại kích thước ngẫu nhiên
-            random_height = random.randint(TUBE_MIN_HEIGHT, TUBE_MAX_HEIGHT)
+            random_height = random.randint(cfg.TUBE_MIN_HEIGHT, cfg.TUBE_MAX_HEIGHT)
             # Tạo lại ống dưới
-            bottom_tube_surface = pygame.transform.scale(tube_img, (TUBE_WIDTH, random_height))
+            bottom_tube_surface = pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, random_height))
             tube[i] = pygame.transform.rotate(bottom_tube_surface, 180)
             # Tạo lại ống trên
-            top_tube_height = SCREEN_HEIGHT - FLOOR_HEIGHT - random_height - TUBE_VERTICAL_GAP
-            tube_up[i] = pygame.transform.scale(tube_img, (TUBE_WIDTH, top_tube_height))
+            top_tube_height = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - random_height - cfg.TUBE_VERTICAL_GAP
+            tube_up[i] = pygame.transform.scale(tube_img, (cfg.TUBE_WIDTH, top_tube_height))
             # Reset trạng thái tính điểm cho ống này
             checkScore[i] = 0
 
@@ -177,15 +186,15 @@ def check_floor_ceiling_collision():
         if state == "play": # Chỉ game over nếu đang chơi
             trigger_game_over()
     # Va chạm sàn
-    if posBird[1] >= SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT:
-        posBird[1] = SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT # Giữ chim trên sàn
+    if posBird[1] >= cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT:
+        posBird[1] = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT # Giữ chim trên sàn
         if state == "play":
             trigger_game_over()
 
 def display_score():
     """Hiển thị điểm số hiện tại."""
-    score_surface = game_font.render(f'Score: {int(score)}', True, WHITE)
-    score_rect = score_surface.get_rect(center=(SCREEN_WIDTH / 2, 100))
+    score_surface = game_font.render(f'Score: {int(score)}', True, cfg.WHITE)
+    score_rect = score_surface.get_rect(center=(cfg.SCREEN_WIDTH / 2, 100))
     screen.blit(score_surface, score_rect)
 
 def trigger_game_over():
@@ -205,10 +214,10 @@ def trigger_game_over():
 def reset_game():
     """Reset các biến về trạng thái ban đầu để chơi lại."""
     global state, gravity, birdMovement, speed, die, score, birdIndex, e_rotated_state, rotated_bird
-    posBird[0] = BIRD_START_X
-    posBird[1] = BIRD_START_Y
-    gravity = GRAVITY
-    speed = GAME_SPEED
+    posBird[0] = cfg.BIRD_START_X
+    posBird[1] = cfg.BIRD_START_Y
+    gravity = cfg.GRAVITY
+    speed = cfg.GAME_SPEED
     birdMovement = 0
     birdIndex = 0
     score = 0
@@ -226,7 +235,7 @@ pygame.time.set_timer(BIRD_FLAP_EVENT, 200) # Tốc độ vỗ cánh
 initialize_tubes() # Khởi tạo ống lần đầu
 
 while running:
-    clock.tick(60) # Giới hạn FPS
+    clock.tick(cfg.FPS) # Giới hạn FPS
 
     # --- Event Handling ---
     for event in pygame.event.get():
@@ -239,7 +248,7 @@ while running:
             elif event.key == pygame.K_SPACE:
                 if state == "play":
                     bird_flap()
-                elif state == "game over" and posBird[1] >= SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT:
+                elif state == "game over" and posBird[1] >= cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT:
                     # Chỉ cho phép reset khi chim đã chạm sàn
                     reset_game()
 
@@ -260,11 +269,11 @@ while running:
             e_rotated_state = 1
         # Làm chim rơi xuống sàn (nếu chưa chạm sàn)
         fall_speed = 7 # Tốc độ rơi khi chết
-        if posBird[1] < SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT:
+        if posBird[1] < cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT:
             posBird[1] += fall_speed
         else:
             # Giữ chim trên sàn khi đã chạm
-            posBird[1] = SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT
+            posBird[1] = cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT
 
     # --- Drawing ---
     if state == "home":
@@ -281,8 +290,8 @@ while running:
         # Vẽ chim
         draw_bird()
         # Vẽ màn hình Game Over khi cần
-        if state == "game over" and posBird[1] >= SCREEN_HEIGHT - FLOOR_HEIGHT - BIRD_HEIGHT:
-             screen.blit(gameover_img, (0, (SCREEN_HEIGHT - FLOOR_HEIGHT) / 2 - 50))
+        if state == "game over" and posBird[1] >= cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT - cfg.BIRD_HEIGHT:
+             screen.blit(gameover_img, (0, (cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT) / 2 - 50))
 
     # --- Update Display ---
     pygame.display.flip()
