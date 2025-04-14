@@ -34,6 +34,8 @@ FONT_SIZE = 35
 
 GEN = 0  # Generation counter
 MAX_FITNESS = 0  # Max fitness across all generations
+LAST_SAVED_SCORE = 0  # Lưu điểm số cuối cùng khi lưu best bird
+SAVE_SCORE_THRESHOLD = 5  # Chỉ lưu khi điểm tăng ít nhất 5 so với lần lưu trước
 
 # --- Game Setup ---
 screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
@@ -173,15 +175,27 @@ def draw_stats(win, birds, gen, max_fitness):
     
     y = 20
     for stat in stats:
-        text = font.render(stat, True, cfg.WHITE)
+        text = font.render(stat, True, WHITE)
         win.blit(text, (20, y))
         y += 25
 
 def save_best_bird(genome, config, filename="best_bird.pickle"):
     """Save the best performing bird's neural network."""
-    with open(filename, "wb") as f:
-        pickle.dump(genome, f)
-    print(f"Best bird saved to {filename}")
+    global LAST_SAVED_SCORE
+    
+    # Lấy điểm số hiện tại
+    current_score = 0
+    if hasattr(genome, 'score'):  # Nếu genome có thuộc tính score
+        current_score = genome.score
+    
+    # Chỉ lưu nếu vượt qua ngưỡng điểm đã đặt
+    if current_score - LAST_SAVED_SCORE >= SAVE_SCORE_THRESHOLD:
+        with open(filename, "wb") as f:
+            pickle.dump(genome, f)
+        print(f"Best bird saved to {filename} (Score: {current_score})")
+        LAST_SAVED_SCORE = current_score
+        return True
+    return False
 
 def load_best_bird(filename="best_bird.pickle", config=None):
     """Load the best bird's neural network."""
@@ -196,162 +210,176 @@ def load_best_bird(filename="best_bird.pickle", config=None):
         print(f"Error loading {filename}")
         return None
 
-# Thêm biến global để theo dõi điểm số cao nhất đã lưu
-LAST_SAVED_SCORE = 0
-LAST_SAVED_FITNESS = 0
-
 def eval_genomes(genomes, config):
-    """Evaluate all genomes in the population."""
-    global GEN, MAX_FITNESS, LAST_SAVED_SCORE, LAST_SAVED_FITNESS
-
-    # Khởi tạo biến theo dõi vật thể tốt nhất trong thế hệ này
-    best_genome = None
-    best_bird = None
-    highest_fitness = 0
-    highest_score = 0
-
+    """Evaluate genomes in NEAT algorithm."""
+    global GEN, MAX_FITNESS
+    GEN += 1
+    
+    # Initialize birds and neural networks
     birds = []
+    networks = []
     ge = []
-    nets = []
-
-    # Tạo danh sách chim và gán bộ gen tương ứng
-    for genome_id, genome in genomes:
+    
+    for _, genome in genomes:
+        bird = Bird(cfg.BIRD_START_X, cfg.BIRD_START_Y)
+        birds.append(bird)
+        
         genome.fitness = 0
-        net = neat.nn.FeedForwardNetwork.create(genome, config)
-        nets.append(net)
-        birds.append(Bird(cfg.BIRD_START_X, cfg.BIRD_START_Y))
+        genome.score = 0  # Thêm thuộc tính score để tracking
         ge.append(genome)
-
+        
+        net = neat.nn.FeedForwardNetwork.create(genome, config)
+        networks.append(net)
+    
     # Initialize game objects
     tubes = [Tube(cfg.SCREEN_WIDTH + i * cfg.TUBE_HORIZONTAL_GAP) for i in range(3)]
     floor_x = 0
     score = 0
     running = True
-
-    # Vòng lặp chính của trò chơi
-    while running and len(birds) > 0:
+    stopped_early = False  # Biến để kiểm tra xem có dừng sớm không
+    
+    # Thêm hướng dẫn dừng
+    stop_text = font.render("Press ESC to stop training and save", True, cfg.WHITE)
+    
+    while running and len([bird for bird in birds if bird.alive]) > 0:
         clock.tick(cfg.FPS)
-
-        # Xử lý sự kiện
+        
+        # Handle quit event
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
                 pygame.quit()
                 quit()
-                break
-
-        # Xác định ống tiếp theo để chim tập trung vào
-        pipe_ind = 0
-        if len(birds) > 0:
-            if len(tubes) > 1 and birds[0].x > tubes[0].x + tubes[0].bottom_rect.width:
-                pipe_ind = 1
-        else:
-            running = False
-            break
-
-        # Các chim di chuyển và nhận thưởng cho việc tồn tại
-        for x, bird in enumerate(birds):
-            # Thưởng cho mỗi khung hình mà chim còn sống
-            ge[x].fitness += 0.1
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:  # Kiểm tra phím ESC
+                    stopped_early = True
+                    running = False
+        
+        # Determine which tube is the next one
+        pipe_index = 0
+        if len(tubes) > 1 and birds[0].x > tubes[0].x + cfg.TUBE_WIDTH:
+            pipe_index = 1
+        
+        # Control each bird using its neural network
+        for i, bird in enumerate(birds):
+            if not bird.alive:
+                continue
+                
+            # Give fitness for staying alive
+            ge[i].fitness += 0.1
             bird.fitness += 0.1
-            bird.move()
-
-            # Neural network nhận đầu vào và quyết định có nhảy hay không
-            output = nets[x].activate((
-                bird.y,
-                abs(bird.y - tubes[pipe_ind].height),
-                abs(bird.y - tubes[pipe_ind].top_height),
-                abs(bird.x - tubes[pipe_ind].x)
-            ))
             
-            # Output > 0.5 thì chim nhảy
+            # Get network inputs:
+            # 1. Bird's y position
+            # 2. Distance to next tube
+            # 3. Height of next tube's gap
+            tube_center = tubes[pipe_index].height + cfg.TUBE_VERTICAL_GAP / 2
+            inputs = (
+                bird.y / cfg.SCREEN_HEIGHT,  # Normalized bird height
+                (tubes[pipe_index].x - bird.x) / cfg.SCREEN_WIDTH,  # Normalized horizontal distance
+                (tube_center - bird.y) / cfg.SCREEN_HEIGHT  # Normalized vertical distance to gap
+            )
+            
+            # Get network output (jump or not)
+            output = networks[i].activate(inputs)
+            
+            # Jump if output is > 0.5
             if output[0] > 0.5:
                 bird.jump()
-
-        add_pipe = False
-        rem = []
         
-        # Kiểm tra va chạm và cập nhật vị trí ống
+        # Move birds
+        for bird in birds:
+            bird.move()
+        
+        # Move tubes
+        remove_tubes = []
         for tube in tubes:
-            for x, bird in enumerate(birds):
-                # Kiểm tra va chạm
-                if tube.collide(bird):
-                    ge[x].fitness -= 1  # Trừ điểm nếu đâm vào ống
-                    # Lưu lại nếu đây là con chim tốt nhất cho đến giờ
-                    if ge[x].fitness > highest_fitness:
-                        highest_fitness = ge[x].fitness
-                        highest_score = score
-                        best_genome = ge[x]
-                        best_bird = bird
-                    birds.pop(x)
-                    nets.pop(x)
-                    ge.pop(x)
-                
-                # Kiểm tra xem chim đã vượt qua ống chưa
+            tube.move()
+            
+            # Mark tube for removal if it's off screen
+            if tube.x + cfg.TUBE_WIDTH < 0:
+                remove_tubes.append(tube)
+            
+            # Check for collisions and update score
+            for i, bird in enumerate(birds):
+                if not bird.alive:
+                    continue
+                    
+                # Check if bird passed the tube
                 if not tube.passed and tube.x < bird.x:
                     tube.passed = True
-                    add_pipe = True
-            
-            # Xóa ống khi chúng ra khỏi màn hình
-            if tube.x + tube.bottom_rect.width < 0:
-                rem.append(tube)
-            
-            tube.move()
+                    bird.score += 1
+                    score = max(score, bird.score)
+                    
+                    # Cập nhật score trong genome để theo dõi
+                    ge[i].score = bird.score
+                    
+                    # Extra fitness for passing tube
+                    ge[i].fitness += 5
+                    bird.fitness += 5
+                
+                # Check for collision
+                if tube.collide(bird):
+                    bird.alive = False
         
-        # Thêm ống mới và tăng điểm
-        if add_pipe:
-            score += 1
-            # Thưởng thêm cho việc đi qua ống
-            for genome in ge:
-                genome.fitness += 5
+        # Remove tubes that are off screen and add new ones
+        for tube in remove_tubes:
+            tubes.remove(tube)
+            # Add new tube
             tubes.append(Tube(tubes[-1].x + cfg.TUBE_HORIZONTAL_GAP))
-        
-        # Xóa ống cũ
-        for r in rem:
-            tubes.remove(r)
-        
-        # Kiểm tra va chạm với đất hoặc trần
-        for x, bird in enumerate(birds):
-            if bird.y + bird.BIRD_HEIGHT >= cfg.SCREEN_HEIGHT - cfg.FLOOR_HEIGHT or bird.y < 0:
-                # Lưu lại nếu đây là con chim tốt nhất cho đến giờ
-                if ge[x].fitness > highest_fitness:
-                    highest_fitness = ge[x].fitness
-                    highest_score = score
-                    best_genome = ge[x]
-                    best_bird = bird
-                birds.pop(x)
-                nets.pop(x)
-                ge.pop(x)
         
         # Update floor position
         floor_x -= cfg.GAME_SPEED
         if floor_x <= -cfg.SCREEN_WIDTH:
             floor_x = 0
         
-        # Cập nhật MAX_FITNESS nếu thế hệ này có fitness cao hơn
-        if highest_fitness > MAX_FITNESS:
-            MAX_FITNESS = highest_fitness
-            # Chỉ lưu nếu điểm tăng ít nhất 1 hoặc fitness tăng đáng kể mà không có sự thay đổi về điểm
-            if highest_score > LAST_SAVED_SCORE or (highest_fitness - LAST_SAVED_FITNESS >= 20 and highest_score >= LAST_SAVED_SCORE):
-                save_best_bird(best_genome, config)
-                LAST_SAVED_SCORE = highest_score
-                LAST_SAVED_FITNESS = highest_fitness
-        
-        # Cập nhật màn hình
+        # Draw everything
         screen.blit(background, (0, 0))
         for tube in tubes:
             tube.draw(screen)
         draw_floor(screen, floor_x)
         
-        # Chỉ vẽ chim nếu còn sống
+        # Chỉ vẽ chim còn sống
         for bird in birds:
             if bird.alive:
                 bird.draw(screen)
         
         # Draw stats
+        current_max_fitness = max([g.fitness for g in ge]) if ge else 0
+        MAX_FITNESS = max(MAX_FITNESS, current_max_fitness)
         draw_stats(screen, birds, GEN, MAX_FITNESS)
         
+        # Hiển thị hướng dẫn dừng
+        screen.blit(stop_text, (20, cfg.SCREEN_HEIGHT - 30))
+        
         pygame.display.flip()
+        
+        # Save best bird if it reaches a significant score
+        best_genome = max(ge, key=lambda g: g.fitness) if ge else None
+        if best_genome and best_genome.fitness > 100:
+            # Không cần lưu mỗi frame, chỉ kiểm tra định kỳ
+            if pygame.time.get_ticks() % 5000 < 100:  # Kiểm tra mỗi 5 giây
+                save_best_bird(best_genome, config)
+    
+    # Lưu chim tốt nhất nếu dừng sớm
+    if stopped_early and ge:
+        best_genome = max(ge, key=lambda g: g.fitness)
+        save_best_bird(best_genome, config, "stopped_best.pickle")
+        # Hiển thị thông báo đã lưu
+        screen.fill(cfg.BLACK)
+        saved_text = font.render("Training stopped. Best bird saved!", True, cfg.WHITE)
+        screen.blit(saved_text, (cfg.SCREEN_WIDTH//2 - saved_text.get_width()//2, cfg.SCREEN_HEIGHT//2))
+        pygame.display.flip()
+        pygame.time.delay(2000)  # Delay 2 giây để hiển thị thông báo
+        
+        return False  # Return False to signal early stopping
+    
+    # Update max fitness for this run
+    if ge:
+        best_fitness = max([g.fitness for g in ge])
+        if best_fitness > MAX_FITNESS:
+            MAX_FITNESS = best_fitness
+            best_genome = max(ge, key=lambda g: g.fitness)
+            save_best_bird(best_genome, config)
     
     return True  # Return True to continue training
 
@@ -429,7 +457,7 @@ def play_with_best_bird(config_path):
         
         # Determine which tube is the next one
         pipe_index = 0
-        if len(tubes) > 1 and bird.x > tubes[0].x + tubes[0].bottom_rect.width:
+        if len(tubes) > 1 and bird.x > tubes[0].x + cfg.TUBE_WIDTH:
             pipe_index = 1
         
         # AI decision making
@@ -453,7 +481,7 @@ def play_with_best_bird(config_path):
         for tube in tubes:
             tube.move()
             
-            if tube.x + tube.bottom_rect.width < 0:
+            if tube.x + cfg.TUBE_WIDTH < 0:
                 remove_tubes.append(tube)
             
             # Update score and check collision
